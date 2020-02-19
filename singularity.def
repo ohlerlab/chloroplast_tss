@@ -1,0 +1,7 @@
+Bootstrap: docker
+
+From: bioconductor/bioconductor_docker:RELEASE_3_10
+
+%post
+  R -e "BiocManager::install(c("BiocParallel","CSAR","DESeq2","doParallel","foreach","fpc","mclust","pheatmap","RColorBrewer","Rsamtools",vsn"))"
+  
