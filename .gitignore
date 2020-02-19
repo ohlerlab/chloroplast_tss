@@ -37,3 +37,25 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+*.pdf
+*.csv
+*.bam
+*.bai
+*.fasta
+*.wig
+*.RD
+*.html
+CSAR-Style/bed-Step1/
+CSAR-Style/beds-Step2/
+CSAR-Style/counts/
+CSAR-Style/linearmodel/bedGraphs/
+CSAR-Style/old/
+bamFiles/coverage/
+bamFiles/ids.txt
+bamFiles/idxstats/
+bamFiles/multiqc_data/
+motif/TSSMotif.pptx
+nutResolution-Noused/beds-Step2/
+nutResolution-Noused/beds/
+nutResolution-Noused/countsPV/
+
