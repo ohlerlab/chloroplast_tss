@@ -1,35 +1,39 @@
-setwd("/scratch/AG_Ohler/jmuino/Julia/Tex-experiment/CSAR-Style/")
+here("/CSAR-Style/")
 library(DESeq2)
 library("pheatmap")
 require("gplots")
- require(ggplot2)
-
+require(ggplot2)
+SAMPLESCORETHRESHOLD <- 10
+CONTROLSCORETHRESHOLD <- 5
+CTL_PERMISSIVE <- TRUE
 ids<-list.files(pattern=".counts$","counts")
 res<-read.table(paste("counts/",ids[1],sep=""),header=T)
 for(id in ids[-1]){
-print(id)
-temp<-read.table(paste("counts/",id,sep=""),header=T)[,7]
-res<-cbind(res,temp)
+  print(id)
+  temp<-read.table(paste("counts/",id,sep=""),header=T)[,7]
+  res<-cbind(res,temp)
 }
 
 
 mid<-as.integer((res$Start+res$End)/2)
 rrna<-sapply(1:length(res$Strand),function(x){if(res$Strand[x]=="+"){rrna<-c(101012:102502,104691:107500,107599:107701,107949:108069)}
-else{rrna<-c(130580:130700,130948:131050,131149:133958,136147:137637)};
-is.element(mid[x],rrna)})
+  else{rrna<-c(130580:130700,130948:131050,131149:133958,136147:137637)};
+  is.element(mid[x],rrna)})
 res<-res[!rrna,]
 coor<-res[,1:6]
 counts<-res[,7:length(res[1,])]
 colnames(counts)<-ids;rownames(counts)<-res$Geneid
-ww<-which(rowSums(counts[,grep("sample",colnames(counts))]>10)>0)
+ww<-which(rowSums(counts[,grep("sample",colnames(counts))]>SAMPLESCORETHRESHOLD)>0)
 #coor<-coor[ww,];counts<-counts[ww,]#This I didn't use for Julia
-for(i in grep("control",colnames(counts))){counts[counts[,i]<10,i]<-10} ##THis I used for Julia
+for(i in grep("control",colnames(counts))){
+  counts[counts[,i]<CONTROLSCORETHRESHOLD,i]<-CONTROLSCORETHRESHOLD
+} ##THis I used for Julia
 write.csv(counts,file="counts.csv")
 
 
 ####Annotate
 mdis=5000
-gff<-read.table("/scratch/AG_Ohler/jmuino/genomes/TAIR9/Araport11_GFF3_genes_transposons.201606.gtf",sep="\t")
+gff<-read.table(here("ext_data/Araport11_GFF3_genes_transposons.201606.gtf"),sep="\t")
 gff<-gff[gff$V3=="gene" & gff$V1=="ChrC",]
 dis<-lapply(coor$Start[coor$Strand=="+"],function(x){temp<- x-gff$V4[gff$V7=="+"];temp[abs(temp)<1000]})
 hist(unlist(dis),breaks=1000)
@@ -52,16 +56,29 @@ colData<-data.frame(cond=factor(cond),rep=as.factor(rep),geno=geno,dev=dev);rown
 save(counts,coor,file="Counts.RD")
 
 for(i in unique(samp)){
-print(i)
-dds <- DESeqDataSetFromMatrix(countData = as.matrix(counts[,samp==i]),colData = colData[samp==i,],design = ~ cond+rep)
-dds1 <- DESeq(dds,fitType="local")
-res<-as.data.frame(results(dds1,contrast=c("cond","sam","con"),altHypothesis="greater"))
-res$pos<-coor$Start;res$pos2<-coor$End;res$strand<-coor$Strand;res$target<-coor$target;res$dis<-coor$dis
-sig<-res[res$padj<0.05 & !is.na(res$padj),7:10];sig$pos<-sig$pos## It is already in0-based coordinates
-sig$chr<-"ChrC";sig$point<-".";sig<-sig[,c(5,1,2,4,6,3)]
-write.table(sig,file=paste("beds-Step2/",i,"-SigFDR.bed",sep=""),sep="\t",col.names=F,row.names=F,quote=F)
-write.csv(res,file=paste(i,"-Step2.csv",sep=""))
-
+  print(i)
+  as.matrix(counts[,samp==i])%>%colnames
+  dds <- DESeqDataSetFromMatrix(countData = as.matrix(counts[,samp==i]),colData = colData[samp==i,],design = ~ cond+rep)
+  dds1 <- DESeq(dds,fitType="local")
+  res<-as.data.frame(results(dds1,contrast=c("cond","sam","con"),altHypothesis="greater"))
+  res$pos<-coor$Start;res$pos2<-coor$End;res$strand<-coor$Strand;res$target<-coor$target;res$dis<-coor$dis
+  #Julia wanted to filter for the number of control samples bigger than the sample
+  #If I an interpretting this correctly then this occurs at the level of DESeq - there's no explicit setting
+  #for how many samples are less than or greater
+  deseq_sig <- (res$padj<0.05 & !is.na(res$padj) )
+  sampmat <- counts[,samp==i]%>%select(matches('sample'))
+  ctlmat <- counts[,samp==i]%>%select(matches('control'))
+  anyCtlLess <- (sampmat >  ctlmat) %>% apply(1,any)
+  signif_vect <- if(CTL_PERMISSIVE) anyCtlLess  else deseq_sig
+  sig<-res[signif_vect,7:10];
+  
+  sig$pos<-sig$pos## It is already in0-based coordinates
+  sig$chr<-"ChrC";sig$point<-".";sig<-sig[,c(5,1,2,4,6,3)]
+  thresholdtypename <- if(CTL_PERMISSIVE) 'permissive'  else 'deseq_sig'
+  dir.create(("beds-Step2/"))
+  write.table(sig,file=paste("beds-Step2/",i,"_pseudocount",CONTROLSCORETHRESHOLD,"_thresholding",thresholdtypename,"-SigFDR.bed",sep=""),sep="\t",col.names=F,row.names=F,quote=F)
+  write.csv(res,file=paste(i,"_pseudocount",CONTROLSCORETHRESHOLD,"_thresholding",thresholdtypename,"-Step2.csv",sep=""))
+  
 }
 
 
@@ -75,18 +92,18 @@ write.csv(res,file=paste(i,"-Step2.csv",sep=""))
 
 
 ################
-setwd("/scratch/AG_Ohler/jmuino/Julia/Tex-experiment/CSAR-Style/")
+setwd(here("CSAR-Style/"))
 library(DESeq2)
 library("pheatmap")
 ids<-list.files(pattern="-Step2.csv")
 res<-read.csv(ids[1],header=T)[,8:11]
 resf<-read.csv(ids[1],header=T)[,8:11]
 for(id in ids){
-print(id)
-temp<-read.csv(id,header=T)[,7]
-res<-cbind(res,temp)
-tempf<-read.csv(id,header=T)[,3]
-resf<-cbind(resf,tempf)
+  print(id)
+  temp<-read.csv(id,header=T)[,7]
+  res<-cbind(res,temp)
+  tempf<-read.csv(id,header=T)[,3]
+  resf<-cbind(resf,tempf)
 };res[is.na(res)]<-1;colnames(res)[5:13]<-ids;
 #res1<-res[rowSums(res[,5:13]<0.05)>0,];rownames(res1)<-paste(res1$pos,res1$target,sep="-")
 res1<-res[rowSums(res[,5:13]<0.05 & resf[,5:13]>2 )>0,];rownames(res1)<-paste(res1$pos,res1$target,sep="-")#added nov 2019
@@ -101,9 +118,9 @@ pheatmap((res2),scale="none", cluster_rows=T, show_rownames=T,cluster_cols=T,fon
 ids<-list.files(pattern="-Step2.csv")
 res<-read.csv(ids[1],header=T)[,8:11]
 for(id in ids){
-print(id)
-temp<-read.csv(id,header=T)[,3]
-res<-cbind(res,temp)
+  print(id)
+  temp<-read.csv(id,header=T)[,3]
+  res<-cbind(res,temp)
 };res[is.na(res)]<- -5;colnames(res)[5:13]<-ids
 res2<-res[,5:13]
 pheatmap((res2),scale="none", cluster_rows=T, show_rownames=T,cluster_cols=T,fontsize_row=5)
@@ -121,10 +138,10 @@ ggplot(pcaData, aes(PC1, PC2, color=cond, shape=geno)) +
   xlab(paste0("PC1: ",percentVar[1],"% variance")) +
   ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
   coord_fixed()
-  dev.off()
+dev.off()
 write.csv(cbind(coor,as.data.frame(assay(vsd))),file="ALLGenesVSDNormPV.csv")
 
- fin<-read.csv("ALLGenesVSDNormPV.csv");rownames(fin)<-fin$X;fin$X<-NULL
+fin<-read.csv("ALLGenesVSDNormPV.csv");rownames(fin)<-fin$X;fin$X<-NULL
 pheatmap(as.matrix(fin), cluster_rows=T, show_rownames=F,cluster_cols=T,scale="none",main="scale by ")#, annotation_row =colData)	
 
 
