@@ -1,6 +1,26 @@
-setwd("/scratch/AG_Ohler/jmuino/Julia/Tex-experiment/CSAR-Style")
+library(here)
+setwd(here("CSAR-Style"))
 library(DESeq2)
 library("pheatmap")
+
+#Using parameters rather than magic numbers here
+#this at least is easy to change
+SAMPLESCORETHRESHOLD <- 10
+FDR_THRESHOLD <- 0.01
+CONTROLSCORETHRESHOLD <- 5
+# 
+# for(FDR_THRESHOLD in c(0.05,0.01)){
+  # for(CONTROLSCORETHRESHOLD in c(10,5)){
+    
+    #This creates a lot of files in a lot of places with a lot of functions
+    #moving into a new working directory is probably the best option
+    setwd(here("/CSAR-Style/"))
+    getwd()
+    outdir <- paste0('run','fdr_',FDR_THRESHOLD,'_pseudocount_',CONTROLSCORETHRESHOLD)
+    dir.create(showWarnings = F,outdir) 
+    setwd(outdir)
+    getwd()
+    
 ##Significants
 ids<-list.files(pattern="-Step2.csv")
 res<-read.csv(ids[1],header=T)[,8:11]
@@ -8,7 +28,9 @@ for(id in ids){
 print(id)
 temp<-read.csv(id,header=T)[,7]
 res<-cbind(res,temp)
-};res[is.na(res)]<-1;colnames(res)[5:13]<-ids
+};
+res[is.na(res)]<-1;
+colnames(res)[5:13]<-ids
 res1<-res[rowSums(res[,5:13]<0.05)>0,];rownames(res1)<-paste(res1$pos,res1$target,sep="-")
 write.csv(res1,"Targets-FDR.csv")
 
@@ -23,14 +45,15 @@ resf<-cbind(resf,temp)
 res1<-resf[rowSums(res[,5:13]<0.05)>0,];rownames(res1)<-paste(res1$pos,res1$target,sep="-")
 write.csv(res1,"Targets-log2FC.csv")
 
-setwd("/scratch/AG_Ohler/jmuino/Julia/Tex-experiment/CSAR-Style/Heatmaps")
+dir.create('Heatmaps')
+setwd("Heatmaps")
 library("pheatmap")
 
 
 res1<-read.csv("../Targets-log2FC.csv");rownames(res1)<-res1$X;res1$X<-NULL
 fdr1<-read.csv("../Targets-FDR.csv");rownames(fdr1)<-fdr1$X;fdr1$X<-NULL
 table(rownames(res1)==rownames(res1))
-anno<-read.csv("/scratch/AG_Ohler/jmuino/CRPC-Marie/PlastidAnnotation.csv",stringsAsFactors=F)
+anno<-read.csv(here("ext_data/PlastidAnnotation.csv"),stringsAsFactors=F)
 symbol<-sapply(as.character(res1$target),function(x)c(anno$symbol[anno$TAIR_id==x],NA)[1])
 type<-sapply(as.character(res1$target),function(x)c(anno$type[anno$TAIR_id==x],NA)[1])
 res2<-res1[,5:13];fdr2<-fdr1[,5:13]
@@ -64,3 +87,4 @@ pheatmap((res2[,grep("late",colnames(res2))]),scale="row", cluster_rows=T,fontsi
 pheatmap((res2[,grep("early",colnames(res2))]),scale="row", cluster_rows=T,fontsize_row=3,annotation_row=rowData[,c(grep("early",colnames(rowData)),10)],annotation_colors=ann_colors)
 pheatmap((res2[,grep("wt",colnames(res2))]),scale="row", cluster_rows=T,fontsize_row=3,annotation_row=rowData[,c(grep("wt",colnames(rowData)),10)],annotation_colors=ann_colors)
 dev.off()
+# }}

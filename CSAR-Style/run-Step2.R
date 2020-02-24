@@ -1,3 +1,4 @@
+library(here)
 setwd(here("/CSAR-Style/"))
 library(DESeq2)
 library("pheatmap")
@@ -9,6 +10,7 @@ require(ggplot2)
 SAMPLESCORETHRESHOLD <- 10
 FDR_THRESHOLD <- 0.01
 CONTROLSCORETHRESHOLD <- 5
+FCTHRESH <- 1.5
 # 
 for(FDR_THRESHOLD in c(0.05,0.01)){
 for(CONTROLSCORETHRESHOLD in c(10,5)){
@@ -20,8 +22,12 @@ getwd()
 outdir <- paste0('run','fdr_',FDR_THRESHOLD,'_pseudocount_',CONTROLSCORETHRESHOLD)
 dir.create(showWarnings = F,outdir) 
 setwd(outdir)
-getwd()
+library(tidyverse)
+if('beds-Step2' %in% list.files(outdir)){
+  list.files(outdir,full=T,rec=T)%>%file.remove
+}
 
+  
 ids<-list.files(pattern=".counts$","../counts")
 res<-read.table(paste("../counts/",ids[1],sep=""),header=T)
 for(id in ids[-1]){
@@ -71,6 +77,9 @@ cond<-as.factor(substr(unlist(lapply(strsplit(ids,"_|\\."),function(x)x[3])),1,3
 colData<-data.frame(cond=factor(cond),rep=as.factor(rep),geno=geno,dev=dev);rownames(colData)<-ids
 save(counts,coor,file=file.path("Counts.RD"))
 
+
+samp<-paste(geno,dev,sep="_")
+
 for(i in unique(samp)){
   
   print(i)
@@ -87,7 +96,6 @@ for(i in unique(samp)){
   sig<-res[deseq_sig,7:10];
   sig$pos<-sig$pos## It is already in0-based coordinates
   sig$chr<-"ChrC";sig$point<-".";sig<-sig[,c(5,1,2,4,6,3)]
-  thresholdtypename <- if(CTL_PERMISSIVE) 'permissive'  else 'deseq_sig'
   dir.create(file.path(("beds-Step2/")))
   write.table(sig,file=file.path(paste("beds-Step2/",i,"-SigFDR.bed",sep="")),sep="\t",col.names=F,row.names=F,quote=F)
   write.csv(res,file=file.path(paste(i,"-Step2.csv",sep="")))
@@ -114,9 +122,11 @@ for(id in ids){
   resf<-cbind(resf,tempf)
 };res[is.na(res)]<-1;colnames(res)[5:13]<-ids;
 #res1<-res[rowSums(res[,5:13]<0.05)>0,];rownames(res1)<-paste(res1$pos,res1$target,sep="-")
-res1<-res[rowSums(res[,5:13]<0.05 & resf[,5:13]>2 )>0,];rownames(res1)<-paste(res1$pos,res1$target,sep="-")#added nov 2019
+#adding explicit fold change threshold here 
+res1<-res[rowSums(res[,5:13]<0.05 & resf[,5:13]>FCTHRESH )>0,];rownames(res1)<-paste(res1$pos,res1$target,sep="-")#added nov 2019
+#and writing to appropriate file
+write.csv(res1,file.path(paste0("Targets-FDR-lFC",FCTHRESH,".csv")))
 
-write.csv(res1,file.path("Targets-FDR-lFC2.csv"))
 res2<-res1[,5:13]
 res2[res2<0.05]<-0
 res2[res2>=0.05]<-1

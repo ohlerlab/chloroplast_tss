@@ -1,8 +1,9 @@
-setwd("/fast/AG_Ohler/jmuino/Julia/Tex-experiment/CSAR-Style/linearmodel")
+setwd(here("CSAR-Style/linearmodel"))
 require(DESeq2)
 require("pheatmap")
 require(RColorBrewer)
 FC=1.5
+
 res0<-read.csv(paste("../Targets-FDR-lFC",FC,".csv",sep=""))
 #res1<-res1[res1$wt_early.Step2.csv<0.05 | res1$wt_late.Step2.csv<0.05,]#adding 5 sept
 
@@ -147,25 +148,25 @@ res$type<-relevel(res$type,ref="wt")
 ll<-lm(counts~type,res[grep("100867",res$tss),])## in rpotmp should be down
 
  summary(ll)
-Coefficients:
-            Estimate Std. Error t value Pr(>|t|)
-(Intercept)  -0.2091     0.4143  -0.505   0.6259
-typeptac2     1.5500     0.5481   2.828   0.0198 *
-typerpotmp   -0.3111     0.5859  -0.531   0.6083
-typerpotp     0.4865     0.5859   0.830   0.4278
----
-Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# Coefficients:
+            # Estimate Std. Error t value Pr(>|t|)
+# (Intercept)  -0.2091     0.4143  -0.505   0.6259
+# typeptac2     1.5500     0.5481   2.828   0.0198 *
+# typerpotmp   -0.3111     0.5859  -0.531   0.6083
+# typerpotp     0.4865     0.5859   0.830   0.4278
+# ---
+# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# Residual standard error: 0.7176 on 9 degrees of freedom
+# Multiple R-squared:  0.606,     Adjusted R-squared:  0.4747
+# F-statistic: 4.615 on 3 and 9 DF,  p-value: 0.03217
 
-Residual standard error: 0.7176 on 9 degrees of freedom
-Multiple R-squared:  0.606,     Adjusted R-squared:  0.4747
-F-statistic: 4.615 on 3 and 9 DF,  p-value: 0.03217
-
-
-
-##
-PEP dependent (genotypes clb19 and ptac2): psbA (1515), psaA (42039), atpB (54665)
-NEP dependent (genotypes rpotmp and rpotp): ycf1 (129272), clpP (71934)
-rpotmp dependent: rrn16 (100891)
+# 
+# 
+# ##
+# PEP dependent (genotypes clb19 and ptac2): psbA (1515), psaA (42039), atpB (54665)
+# NEP dependent (genotypes rpotmp and rpotp): ycf1 (129272), clpP (71934)
+# rpotmp dependent: rrn16 (100891)
 w<-res1[grep("129272|71934|1515|42039|54665|100891",rownames(res1)),]
 colnames(w)<-sub("..bam.counts","",colnames(w))
 pheatmap(as.matrix(w),scale="row")
