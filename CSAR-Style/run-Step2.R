@@ -1,16 +1,32 @@
-here("/CSAR-Style/")
+setwd(here("/CSAR-Style/"))
 library(DESeq2)
 library("pheatmap")
 require("gplots")
 require(ggplot2)
+
+#Using parameters rather than magic numbers here
+#this at least is easy to change
 SAMPLESCORETHRESHOLD <- 10
+FDR_THRESHOLD <- 0.01
 CONTROLSCORETHRESHOLD <- 5
-CTL_PERMISSIVE <- TRUE
-ids<-list.files(pattern=".counts$","counts")
-res<-read.table(paste("counts/",ids[1],sep=""),header=T)
+# 
+for(FDR_THRESHOLD in c(0.05,0.01)){
+for(CONTROLSCORETHRESHOLD in c(10,5)){
+  
+#This creates a lot of files in a lot of places with a lot of functions
+#moving into a new working directory is probably the best option
+setwd(here("/CSAR-Style/"))
+getwd()
+outdir <- paste0('run','fdr_',FDR_THRESHOLD,'_pseudocount_',CONTROLSCORETHRESHOLD)
+dir.create(showWarnings = F,outdir) 
+setwd(outdir)
+getwd()
+
+ids<-list.files(pattern=".counts$","../counts")
+res<-read.table(paste("../counts/",ids[1],sep=""),header=T)
 for(id in ids[-1]){
   print(id)
-  temp<-read.table(paste("counts/",id,sep=""),header=T)[,7]
+  temp<-read.table(paste("../counts/",id,sep=""),header=T)[,7]
   res<-cbind(res,temp)
 }
 
@@ -51,11 +67,12 @@ geno<-as.factor(unlist(lapply(strsplit(ids,"_"),function(x)x[1])))
 dev<-as.factor(unlist(lapply(strsplit(ids,"_"),function(x)x[2])))
 rep<-as.factor(unlist(lapply(strsplit(ids,"control|sample"),function(x)x[2])))
 cond<-as.factor(substr(unlist(lapply(strsplit(ids,"_|\\."),function(x)x[3])),1,3))
-samp<-paste(geno,dev,sep="_")
+
 colData<-data.frame(cond=factor(cond),rep=as.factor(rep),geno=geno,dev=dev);rownames(colData)<-ids
-save(counts,coor,file="Counts.RD")
+save(counts,coor,file=file.path("Counts.RD"))
 
 for(i in unique(samp)){
+  
   print(i)
   as.matrix(counts[,samp==i])%>%colnames
   dds <- DESeqDataSetFromMatrix(countData = as.matrix(counts[,samp==i]),colData = colData[samp==i,],design = ~ cond+rep)
@@ -65,19 +82,15 @@ for(i in unique(samp)){
   #Julia wanted to filter for the number of control samples bigger than the sample
   #If I an interpretting this correctly then this occurs at the level of DESeq - there's no explicit setting
   #for how many samples are less than or greater
-  deseq_sig <- (res$padj<0.05 & !is.na(res$padj) )
-  sampmat <- counts[,samp==i]%>%select(matches('sample'))
-  ctlmat <- counts[,samp==i]%>%select(matches('control'))
-  anyCtlLess <- (sampmat >  ctlmat) %>% apply(1,any)
-  signif_vect <- if(CTL_PERMISSIVE) anyCtlLess  else deseq_sig
-  sig<-res[signif_vect,7:10];
-  
+  #I'll therefore just use a different FDR threshold
+  deseq_sig <- (res$padj<FDR_THRESHOLD & !is.na(res$padj) )
+  sig<-res[deseq_sig,7:10];
   sig$pos<-sig$pos## It is already in0-based coordinates
   sig$chr<-"ChrC";sig$point<-".";sig<-sig[,c(5,1,2,4,6,3)]
   thresholdtypename <- if(CTL_PERMISSIVE) 'permissive'  else 'deseq_sig'
-  dir.create(("beds-Step2/"))
-  write.table(sig,file=paste("beds-Step2/",i,"_pseudocount",CONTROLSCORETHRESHOLD,"_thresholding",thresholdtypename,"-SigFDR.bed",sep=""),sep="\t",col.names=F,row.names=F,quote=F)
-  write.csv(res,file=paste(i,"_pseudocount",CONTROLSCORETHRESHOLD,"_thresholding",thresholdtypename,"-Step2.csv",sep=""))
+  dir.create(file.path(("beds-Step2/")))
+  write.table(sig,file=file.path(paste("beds-Step2/",i,"-SigFDR.bed",sep="")),sep="\t",col.names=F,row.names=F,quote=F)
+  write.csv(res,file=file.path(paste(i,"-Step2.csv",sep="")))
   
 }
 
@@ -87,12 +100,7 @@ for(i in unique(samp)){
 
 
 
-
-
-
-
 ################
-setwd(here("CSAR-Style/"))
 library(DESeq2)
 library("pheatmap")
 ids<-list.files(pattern="-Step2.csv")
@@ -108,7 +116,7 @@ for(id in ids){
 #res1<-res[rowSums(res[,5:13]<0.05)>0,];rownames(res1)<-paste(res1$pos,res1$target,sep="-")
 res1<-res[rowSums(res[,5:13]<0.05 & resf[,5:13]>2 )>0,];rownames(res1)<-paste(res1$pos,res1$target,sep="-")#added nov 2019
 
-write.csv(res1,"Targets-FDR-lFC2.csv")
+write.csv(res1,file.path("Targets-FDR-lFC2.csv"))
 res2<-res1[,5:13]
 res2[res2<0.05]<-0
 res2[res2>=0.05]<-1
@@ -130,7 +138,7 @@ colData<-data.frame(cond=factor(cond),rep=as.factor(rep),geno=geno,dev=dev);rown
 dds <- DESeqDataSetFromMatrix(countData = counts,colData = colData,design = ~ cond+rep+geno+dev)
 dds1 <- DESeq(dds,fitType="local")
 vsd <- varianceStabilizingTransformation(dds1,fitType="local")
-pdf("PCA-vsdNomrPV.pdf")
+pdf(file.path("PCA-vsdNomrPV.pdf"))
 pcaData <- plotPCA(vsd, intgroup=c("cond", "geno"), returnData=TRUE)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
 ggplot(pcaData, aes(PC1, PC2, color=cond, shape=geno)) +
@@ -139,10 +147,11 @@ ggplot(pcaData, aes(PC1, PC2, color=cond, shape=geno)) +
   ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
   coord_fixed()
 dev.off()
-write.csv(cbind(coor,as.data.frame(assay(vsd))),file="ALLGenesVSDNormPV.csv")
+write.csv(cbind(coor,as.data.frame(assay(vsd))),file=file.path("ALLGenesVSDNormPV.csv"))
 
 fin<-read.csv("ALLGenesVSDNormPV.csv");rownames(fin)<-fin$X;fin$X<-NULL
-pheatmap(as.matrix(fin), cluster_rows=T, show_rownames=F,cluster_cols=T,scale="none",main="scale by ")#, annotation_row =colData)	
+
+#pheatmap(as.matrix(fin), cluster_rows=T, show_rownames=F,cluster_cols=T,scale="none",main="scale by ")#, annotation_row =colData)	
 
 
 ids<-colnames(fin)
@@ -160,7 +169,7 @@ colData<-data.frame(cond,dev,genotype);rownames(colData)<-colnames(res)
 
 #res1<-res[rowSums(res>2)>4,]
 #res1[res1<0]<-0
-pdf("Log2RatioDeseq2-heatmapPV.pdf")
+pdf(file.path("Log2RatioDeseq2-heatmapPV.pdf"))
 pheatmap(res,scale="none", cluster_rows=T, show_rownames=T,cluster_cols=T, annotation_col=colData)
 pheatmap(res[,dev=="early"],scale="none", cluster_rows=T, show_rownames=T,cluster_cols=T, annotation_col=colData[dev=="early",])
 pheatmap(res[,dev=="late"],scale="none", cluster_rows=T, show_rownames=T,cluster_cols=T, annotation_col=colData[dev=="late",])
@@ -187,5 +196,6 @@ points(pca[[2]][genotype=="rpotmp" & dev=="early",1:2],col="brown",lwd=4,pch=24)
 points(pca[[2]][genotype=="rpotp" & dev=="early",1:2],col="yellow",lwd=4,pch=24)
 legend("topright",legend=c("clb19","wt","ptac2","rpotmp","rpotp"),col=c("red","blue","green","brown","yellow"),lwd=3)
 dev.off()
-write.csv(res,"Log2RatioDeseq2-heatmapPV.csv")
+write.csv(res,file.path("Log2RatioDeseq2-heatmapPV.csv"))
 
+}}
