@@ -34,6 +34,9 @@ order<-sapply(rownames(res1),function(x)grep(x,fdr$pos))
 fdr1<-fdr[order,]
 
 
+
+alph
+
 ####
 if(F){
 data<-assay(vsd)
