@@ -1,12 +1,35 @@
-setwd("/fast/AG_Ohler/jmuino/Julia/Tex-experiment/CSAR-Style/linearmodel")
 require(DESeq2)
 require("pheatmap")
 require(RColorBrewer)
-FC=1
-res0<-read.csv(paste("../Targets-FDR-lFC",FC,".csv",sep=""))
+FC=2
+library(here)
+setwd(here("/CSAR-Style/"))
+library(DESeq2)
+library("pheatmap")
+require("gplots")
+require(ggplot2)
+library(memoise)
+pdf <- grDevices::pdf
+DESeq <- memoise(DESeq2::DESeq)
 
+for(FDR_THRESHOLD in c(0.05)){
+for(CONTROLSCORETHRESHOLD in c(5)){
+for(FC in c(1.5,2)){
+#   
+#This creates a lot of files in a lot of places with a lot of functions
+#moving into a new working directory is probably the best option
+setwd(here("/CSAR-Style/"))
+getwd()
+outdir <- paste0('run','fdr_',FDR_THRESHOLD,'_pseudocount_',CONTROLSCORETHRESHOLD)
+dir.create(showWarnings = F,outdir) 
+setwd(outdir)
+library(tidyverse)
 
-load("../Counts.RD");
+res0<-read.csv(paste("Targets-FDR-lFC",FC,".csv",sep=""))
+fdr<-read.csv(paste("Targets-FDR-lFC",FC,".csv",sep=""));rownames(fdr)<-fdr$X;fdr$X<-NULL
+
+message("foobarbar")
+load("Counts.RD");
 counts<-counts[,-grep("early|control|clb19",colnames(counts))];ids<-colnames(counts)
 geno<-as.factor(unlist(lapply(strsplit(ids,"_"),function(x)x[1])))
 dev<-as.factor(unlist(lapply(strsplit(ids,"_"),function(x)x[2])))
@@ -28,11 +51,11 @@ exp<-as.data.frame(pv0[sigtss,]);
 exp1<-as.data.frame(fc[sigtss,]);
 res1=exp1
 
-fdr<-read.csv(paste("../Targets-FDR-lFC",FC,".csv",sep=""));rownames(fdr)<-fdr$X;fdr$X<-NULL
 order<-sapply(rownames(res1),function(x)grep(x,fdr$pos))
 fdr1<-fdr[order,]
 
 
+message("foobar")
 if(FALSE){
 ####
 data<-assay(vsd)
@@ -55,7 +78,7 @@ temp<-strsplit(colnames(res1)," ")
 genotype<-unlist(lapply(temp,function(x)x[2]))
 dev<-unlist(lapply(temp,function(x)x[1]))
 colData<-data.frame(dev,genotype);rownames(colData)<-colnames(res1)
-anno<-read.csv("/scratch/AG_Ohler/jmuino/CRPC-Marie/PlastidAnnotation.csv",stringsAsFactors=F)
+anno<-read.csv(here("ext_data/PlastidAnnotation.csv"),stringsAsFactors=F)
 symbol<-sapply(as.character(fdr1$target),function(x)c(anno$symbol[anno$TAIR_id==x],NA)[1])
 type<-sapply(as.character(fdr1$target),function(x)c(anno$type[anno$TAIR_id==x],NA)[1])
 rownames(res1)<-paste(fdr1$pos,fdr1$strand,symbol)
@@ -67,7 +90,7 @@ colnames(res1)<-substr(colnames(res1),1,3)
 
 
 library(fpc)
-
+message("foo")
 pdf(paste("LateFCvsWT-Kmeans-lFC",FC,".pdf",sep=""))
 for(nc in 2:10){
 par(mfrow=c(4,3))
@@ -75,11 +98,15 @@ cluster=kmeans(res1[,1:3],nc,iter.max=10^6,nstart=100)$cluster
  table(cluster)
 plotcluster(res1[,1:3],cluster,main=paste("psbA is cluster", as.integer(cluster["1515 - PSBA"])))
 boxplot(res1[,1:3],main="All");abline(v=0,col="green",lwd=3);abline(h=0,lwd=3,col="green");abline(h=0,lwd=3,col="green")
-for (i in 1:nc){boxplot(res1[cluster==i,1:3],main=paste("cluster",i,"\n n=",sum(cluster==i)));abline(h=0,lwd=3,col="green")}
+for (i in 1:nc){
+        boxplot(res1[cluster==i,1:3],main=paste("cluster",i,"\n n=",sum(cluster==i)));
+        abline(h=0,lwd=3,col="green")}
+        write.csv(data.frame(res1,kmers=cluster),file=paste("LateFCvsWT-Kmeans",nc,"-FC",FC,".csv",sep=""))
 }
 dev.off()
 
 
+message("ffffff")
 pdf(paste("LateFCvsWT-pamk-lFC",FC,".pdf",sep=""))
 cluster1=pamk(res1[,1:3],3:15)[[1]][[3]]
  table(cluster1)
@@ -95,14 +122,15 @@ dev.off()
 
 
 
-pdf("LateFCvsWT-Mclust-lFC1.pdf")
+message("peh")
+pdf(paste0("LateFCvsWT-Mclust-lFC",FC,".pdf"))
 library(mclust)
 cluster=Mclust(res1[,1:3],G=3:9)$classification
  table(cluster)
  par(mfrow=c(3,3))
 plotcluster(res1[,1:3],cluster,main=paste("psbA is cluster", as.integer(cluster["1515 - PSBA"])))
 boxplot(res1[,1:3],main="All")
-for (i in 1:4)boxplot(res1[cluster==i,1:3],main=paste("cluster",i,"\n n=",sum(cluster==i)))
+for (i in unique(cluster))boxplot(res1[cluster==i,1:3],main=paste("cluster",i,"\n n=",sum(cluster==i)))
 dev.off()
 
 write.csv(data.frame(res1,kmers=cluster,pamk=cluster1),file="LateFCvsWT-2Classifiers.csv")
@@ -110,3 +138,6 @@ write.csv(data.frame(res1,kmers=cluster,pamk=cluster1),file="LateFCvsWT-2Classif
 write.csv(res1,file="LateFCvsWT-all.csv")
 res2=res1;res2[exp>  -log10(0.05)]<-0
 write.csv(res2,file="LateFCvsWT-onlysig.csv")
+}
+}
+}

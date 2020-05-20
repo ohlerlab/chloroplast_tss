@@ -1,13 +1,33 @@
-setwd(here("CSAR-Style/linearmodel"))
 require(DESeq2)
 require("pheatmap")
 require(RColorBrewer)
-FC=1.5
+FC=2
+library(here)
+setwd(here("/CSAR-Style/"))
+library(DESeq2)
+library("pheatmap")
+require("gplots")
+require(ggplot2)
+library(memoise)
+pdf<-grDevices::pdf
 
-res0<-read.csv(paste("../Targets-FDR-lFC",FC,".csv",sep=""))
+DESeq <- memoise(DESeq2::DESeq)
+for(FDR_THRESHOLD in c(0.05)){
+for(CONTROLSCORETHRESHOLD in c(5)){
+for(FC in c(1.5,2)){
+#   
+#This creates a lot of files in a lot of places with a lot of functions
+#moving into a new working directory is probably the best option
+setwd(here('/CSAR-Style/'))
+outdir <- paste0('run','fdr_',FDR_THRESHOLD,'_pseudocount_',CONTROLSCORETHRESHOLD)
+dir.create(showWarnings = F,outdir) 
+setwd(outdir)
+library(tidyverse)
+
+res0<-read.csv(paste("Targets-FDR-lFC",FC,".csv",sep=""))
 #res1<-res1[res1$wt_early.Step2.csv<0.05 | res1$wt_late.Step2.csv<0.05,]#adding 5 sept
 
-load("../Counts.RD");
+load("Counts.RD");
 counts<-counts[,-grep("late|control",colnames(counts))];ids<-colnames(counts)
 geno<-as.factor(unlist(lapply(strsplit(ids,"_"),function(x)x[1])))
 dev<-as.factor(unlist(lapply(strsplit(ids,"_"),function(x)x[2])))
@@ -29,13 +49,12 @@ exp<-as.data.frame(pv0[sigtss,]);
 exp1<-as.data.frame(fc[sigtss,]);
 res1=exp1
 
-fdr<-read.csv(paste("../Targets-FDR-lFC",FC,".csv",sep=""));rownames(fdr)<-fdr$X;fdr$X<-NULL
+fdr<-read.csv(paste("Targets-FDR-lFC",FC,".csv",sep=""));rownames(fdr)<-fdr$X;fdr$X<-NULL
 order<-sapply(rownames(res1),function(x)grep(x,fdr$pos))
 fdr1<-fdr[order,]
 
 
 
-alph
 
 ####
 if(F){
@@ -57,7 +76,7 @@ temp<-strsplit(colnames(res1)," ")
 genotype<-unlist(lapply(temp,function(x)x[2]))
 dev<-unlist(lapply(temp,function(x)x[1]))
 colData<-data.frame(dev,genotype);rownames(colData)<-colnames(res1)
-anno<-read.csv("/scratch/AG_Ohler/jmuino/CRPC-Marie/PlastidAnnotation.csv",stringsAsFactors=F)
+anno<-read.csv(here("ext_data/PlastidAnnotation.csv"),stringsAsFactors=F)
 symbol<-sapply(as.character(fdr1$target),function(x)c(anno$symbol[anno$TAIR_id==x],NA)[1])
 type<-sapply(as.character(fdr1$target),function(x)c(anno$type[anno$TAIR_id==x],NA)[1])
 rownames(res1)<-paste(fdr1$pos,fdr1$strand,symbol)
@@ -85,25 +104,23 @@ write.csv(data.frame(res1,kmers=cluster),file=paste("EarlyFCvsWT-Kmeans",nc,"-FC
 }
 dev.off()
 
-
 pdf(paste("EarlyFCvsWT-pamk-lFC",FC,".pdf",sep=""))
 sig<- rowSums(exp> -log10(0.05),na.rm=T)>0
 res2=res1#[sig,]
 cluster1=pamk(res2[,1:3],3:15,scaling=F)[[1]][[3]]
- table(cluster1)
- par(mfrow=c(3,3))
+table(cluster1)
+par(mfrow=c(3,3))
 plotcluster(res2[,1:3],cluster1,main=paste("psbA is cluster", as.integer(cluster1["1515 - PSBA"])))
 boxplot(res2[,1:3],main="All");abline(h=0,lwd=3,col="green")
 for (i in 1:max(cluster1)){boxplot(res2[cluster1==i,1:3],main=paste("cluster",i,"\n n=",sum(cluster1==i)));abline(h=0,lwd=3,col="green")}
 write.csv(data.frame(res2,kmers=cluster1),file=paste("EarlyFCvsWT-pamk-FC",FC,".csv",sep=""))
 dev.off()
+normalizePath(paste("EarlyFCvsWT-pamk-lFC",FC,".pdf",sep=""))
 
 
 
 
-
-
-pdf("EarlyFCvsWT-heatmap-lFC1.pdf")
+pdf(paste0("EarlyFCvsWT-heatmap-lFC",FC,".pdf"))
 out<-pheatmap(res1[,1:3],scale="none", cluster_rows=T, show_rownames=T,cluster_cols=T, annotation_row=rowData,annotation_colors=ann_colors,fontsize_row=3)
 for(nc in 2:10){
 par(mfrow=c(4,3))
@@ -116,7 +133,7 @@ write.csv(data.frame(res1,kmers=cluster),file=paste("EarlyFCvsWT-Heatmap",nc,".c
 }
 dev.off()
 
-pdf("EarlyFCvsWT-Mclust-lFC1.pdf")
+pdf(paste0("EarlyFCvsWT-Mclust-lFC",FC,"1.pdf"))
 library(mclust)
 cluster=Mclust(res1[,1:3],G=3:9)$classification
  table(cluster)
@@ -128,58 +145,13 @@ dev.off()
 
 write.csv(data.frame(res1,kmers=cluster,pamk=cluster1),file="EarlyFCvsWT-2Classifiers.csv")
 
+cluster1%>%table
+cluster1[names(cluster1)%>%str_detect('100867')]
+
 write.csv(res1,file="EarlyFCvsWT-all.csv")
 res2=res1;res2[exp> -log10(exp)]<-0
 write.csv(res2,file="EarlyFCvsWT-onlysig.csv")
 
 
 
-
-
-##linear model
-res0<-cbind(res1[,5:8]-res1[,1:4],-res1[,9:11]+res1[,12:14],-res1[,15:17]+res1[,18:20],-res1[,21:23]+res1[,24:26])
-res0$tss<-rownames(res0)
-
-res<-res0[,c(1,14)];res$type=colnames(res0)[1];colnames(res)[1]<-"counts"
-for(i in 2:13){
-temp<-res0[,c(i,14)];temp$type=colnames(res0)[i];colnames(temp)[1]<-"counts"
-res<-rbind(res,temp)
-}
-res$type<-as.factor(unlist(lapply(strsplit(res$type,"_"),function(x)x[1])))
-res$tss<-as.factor(res$tss)
-res$type<-relevel(res$type,ref="wt")
-ll<-lm(counts~type,res[grep("100867",res$tss),])## in rpotmp should be down
-
- summary(ll)
-# Coefficients:
-            # Estimate Std. Error t value Pr(>|t|)
-# (Intercept)  -0.2091     0.4143  -0.505   0.6259
-# typeptac2     1.5500     0.5481   2.828   0.0198 *
-# typerpotmp   -0.3111     0.5859  -0.531   0.6083
-# typerpotp     0.4865     0.5859   0.830   0.4278
-# ---
-# Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
-# 
-# Residual standard error: 0.7176 on 9 degrees of freedom
-# Multiple R-squared:  0.606,     Adjusted R-squared:  0.4747
-# F-statistic: 4.615 on 3 and 9 DF,  p-value: 0.03217
-
-# 
-# 
-# ##
-# PEP dependent (genotypes clb19 and ptac2): psbA (1515), psaA (42039), atpB (54665)
-# NEP dependent (genotypes rpotmp and rpotp): ycf1 (129272), clpP (71934)
-# rpotmp dependent: rrn16 (100891)
-w<-res1[grep("129272|71934|1515|42039|54665|100891",rownames(res1)),]
-colnames(w)<-sub("..bam.counts","",colnames(w))
-pheatmap(as.matrix(w),scale="row")
-
-ll<-lapply(unique(res$tss),function(x){lm(counts~type,res[res$tss==x,])})
-names(ll)<-unique(res$tss)
-summary(ll[[grep("1515",names(ll))]])
-ll1<-t(as.data.frame(lapply(ll,function(x) {temp<-summary(x)[[4]]; temp1<-temp[,1]; temp1[temp[,4]>0.05]<-0;temp1 })))
-rownames(ll1)<-names(ll);res1<-ll1[,2:4]
-write.csv(res1,file="LMresults-LateNoCLBvsControl-0isnosignificant.csv")
-ll1<-t(as.data.frame(lapply(ll,function(x) {temp<-summary(x)[[4]]; temp1<-temp[,1]; temp1 })))
-rownames(ll1)<-names(ll);res1<-ll1[,2:4]
-write.csv(res1,file="LMresults-LateNoCLBvsControl.csv")
+}}}

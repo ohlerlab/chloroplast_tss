@@ -110,11 +110,11 @@ for(i in unique(samp)){
 
 allbeds =   Sys.glob(file.path(paste("beds-Step2/","*","-SigFDR.bed",sep="")))%>%setNames(.,.)
 names(allbeds)%<>%basename%>%str_replace('\\-SigFD.*','')
-allbeddf<-allbeds%>%map_df(.id='sample',read_tsv,col_names=F)
-
-library(magrittr)
-
-res%>%.$pos%>%is_in(allbeddf$X2)
+library(rtracklayer)
+allbeddf<-allbeds%>%map(import)%>%GRangesList%>%unlist%>%unique
+names(allbeddf)<-NULL
+allbeddf$score = 0
+allbeddf%>%export('beds-Step2/merge4julia.bed')
 
 ################
 library(DESeq2)
@@ -134,22 +134,22 @@ res[is.na(res)]<-1;colnames(res)[5:13]<-ids;
 #adding explicit fold change threshold here 
 FCTHRESH=1
 for(FCTHRESH in FCTHRESHvalues){
-
-deseq_sig <- (res$padj<FDR_THRESHOLD & !is.na(res$padj) )
   
-res1<-res[rowSums(res[,5:13]<0.05 & resf[,5:13]>FCTHRESH )>0,];
-rownames(res1)<-paste(res1$pos,res1$target,sep="-")#added nov 2019
-
-#and writing to appropriate file
-write.csv(res1,file.path(paste0("Targets-FDR-lFC",FCTHRESH,".csv")))
-
-res1%>%nrow
-
-
-res2<-res1[,5:13]
-res2[res2<0.05]<-0
-res2[res2>=0.05]<-1
-pheatmap((res2),scale="none", cluster_rows=T, show_rownames=T,cluster_cols=T,fontsize_row=5)
+  deseq_sig <- (res$padj<FDR_THRESHOLD & !is.na(res$padj) )
+    
+  res1<-res[rowSums(res[,5:13]<FDR_THRESHOLD & resf[,5:13]>FCTHRESH )>0,];
+  rownames(res1)<-paste(res1$pos,res1$target,sep="-")#added nov 2019
+  
+  #and writing to appropriate file
+  write.csv(res1,file.path(paste0("Targets-FDR-lFC",FCTHRESH,".csv")))
+ 
+  stopifnot(nrow(res1) <= length(allbeddf))
+  
+  
+  res2<-res1[,5:13]
+  res2[res2<0.05]<-0
+  res2[res2>=0.05]<-1
+ # pheatmap((res2),scale="none", cluster_rows=T, show_rownames=T,cluster_cols=T,fontsize_row=5)
 }
 
 ids<-list.files(pattern="-Step2.csv")
@@ -160,7 +160,7 @@ for(id in ids){
   res<-cbind(res,temp)
 };res[is.na(res)]<- -5;colnames(res)[5:13]<-ids
 res2<-res[,5:13]
-pheatmap((res2),scale="none", cluster_rows=T, show_rownames=T,cluster_cols=T,fontsize_row=5)
+#pheatmap((res2),scale="none", cluster_rows=T, show_rownames=T,cluster_cols=T,fontsize_row=5)
 
 ##All
 colData<-data.frame(cond=factor(cond),rep=as.factor(rep),geno=geno,dev=dev);rownames(colData)<-colnames(counts)
@@ -233,4 +233,5 @@ message(normalizePath(plotfile))
 plotfile%>%file.info%>%.$size%>%`>`(4e3)
 
 write.csv(res,file.path("Log2RatioDeseq2-heatmapPV.csv"))
+
 }}
